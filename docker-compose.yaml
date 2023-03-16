@@ -1,0 +1,113 @@
+version: '2'
+services:
+  redis:
+    image: redis
+    networks:
+      - mantiser
+  splash:
+    image: scrapinghub/splash
+    ports:
+      - 8050:8050
+    networks:
+      - mantiser
+  nats:
+    image: nats
+    command: ['-js','--cluster_name','mantiser']
+    ports:
+      - 4222:4222
+      - 8222:8222
+    networks:
+      - mantiser
+  nats-gui:
+    image: piotrpersona/nats-streaming-ui:latest 
+    environment:
+      STAN_URL: http://nats:4222
+      STAN_MONITOR_URL: http://nats:8222
+      STAN_CLUSTER: "mantiser"
+    ports:
+      - 8282:8282
+    networks:
+      - mantiser
+  meilisearch:
+    image: getmeili/meilisearch:latest
+    ports:
+      - 7700:7700
+    networks:
+      - mantiser
+    volumes:
+      - ./meili_data:/meili_data
+    environment:
+      MEILI_MASTER_KEY: "ABC123"
+  mongo1:
+    hostname: mongo1
+    image: mongo
+    expose:
+      - 27017
+    ports:
+      - 27017:27017
+    networks:
+      - mantiser
+    command: --replSet rs0 --bind_ip_all
+    volumes:
+      - ./mongo1/db:/data/db
+    healthcheck:
+      test: test $$(echo "rs.initiate().ok || rs.status().ok" | mongo -u $${MONGO_INITDB_ROOT_USERNAME} -p $${MONGO_INITDB_ROOT_PASSWORD} --quiet) -eq 1
+      interval: 10s
+  mongo2:
+    hostname: mongo2
+    image: mongo
+    expose:
+      - 27017
+    ports:
+      - 27018:27017
+    volumes:
+      - ./mongo2/db:/data/db
+    networks:
+      - mantiser
+    command: --replSet rs0 --bind_ip_all
+  mongo3:
+    hostname: mongo3
+    image: mongo
+    expose:
+      - 27017
+    ports:
+      - 27019:27017
+    volumes:
+      - ./mongo3/db:/data/db
+    networks:
+      - mantiser
+    command: --replSet rs0 --bind_ip_all
+  mysql:
+    image: mysql:5.7
+    volumes:
+      - ./mysql:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: keycloak
+      MYSQL_USER: keycloak
+      MYSQL_PASSWORD: password
+    networks:
+      - mantiser
+  keycloak:
+    image: quay.io/keycloak/keycloak
+    environment:
+      DB_VENDOR: MYSQL
+      DB_ADDR: mysql
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: password
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: Pa55w0rd
+      # Uncomment the line below if you want to specify JDBC parameters. The parameter below is just an example, and it shouldn't be used in production without knowledge. It is highly recommended that you read the MySQL JDBC driver documentation in order to use it.
+      #JDBC_PARAMS: "connectTimeout=30000"
+    ports:
+      - 8080:8080
+      - 9990:9990
+    networks:
+      - mantiser
+    depends_on:
+      - mysql
+    command: start-dev
+networks:
+  mantiser:
+    external: true
